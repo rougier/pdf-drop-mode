@@ -1,9 +1,22 @@
 * Documentation
 
-~pdf-drop-mode~ is a convenient mode that search for the DOI of any file that is dropped onto a buffer. To do that, the mode search the DOI using several different methods (whose order can be specified). By default, it will first look at the file metadata to check if a DOI is attached using exiftool (whose path can be specified). If this fails, it will search the content of the file  to try to locate a DOI regex on the first page (PDF is transformed into text  using the pdftotext utility). If this fails, it will search again the  metadata to try to find the title and query the crossref database to get a  corresponding DOI. If this fails, it will ask the user to enter the title of
- the file and query the crossref database to try to get a correspondong DOI. If this fails, then the search has failed.
+~pdf-drop-mode~ is a convenient mode that search for the DOI of any file that is
+dropped onto a buffer. To do that, the mode searches the DOI using several
+different methods (whose order can be specified):
 
-When search finishes, a user-defined function is called with the filename and
+1. Look at the file metadata to check if a DOI is attached using exiftool
+   (whose path can be specified).
+
+2. Search the content of the file to try to locate a DOI regex on the first
+   page (PDF is transformed into text  using the pdftotext utility).
+
+3. Search again the metadata to try to find the title and query the crossref
+   database to get a corresponding DOI.
+
+4. Ask the user to enter the title of the file and query the crossref database
+   to try to get a correspondong DOI.
+
+If all methods failed, then the search has failed. When search finishes, a user-defined function is called with the filename and
 the DOI as arguments.
 
 ** Installation
