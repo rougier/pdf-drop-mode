@@ -219,11 +219,8 @@ doi is returned."
                      (kill-buffer buffer))))))))
 
     ;; Debug
-    (when doi
-      (message "%s : %s" (file-name-nondirectory file) doi)
-      (let ((bibtex (pdf-drop--bibtex-from-doi doi)))
-        (message "%s" bibtex)))
-    ))
+    (when (and doi pdf-drop-search-hook)
+      (apply pdf-drop-search-hook (list file doi)))))
 
 
 (defun pdf-drop--bibtex-from-doi (doi)
@@ -257,12 +254,7 @@ doi is returned."
         (add-to-list 'dnd-protocol-alist item)
       (setq dnd-protocol-alist (remove item dnd-protocol-alist)))))
  
-;; (pdf-drop-get-doi-from-content "/Users/rougier/Desktop/journal.pcbi.1010047.pdf")
-;; (pdf-drop-get-doi-from-metadata "/Users/rougier/Desktop/journal.pcbi.1010047.pdf")
-;; (pdf-drop-get-doi-from-title "Conflict and competition between model-based and model-free control")
-;; (pdf-drop-get-doi-from-title "A Theory of Memory Retrieval")
 
 (provide 'pdf-drop-mode)
 ;;; pdf-drop-mode.el ends here
-
 
