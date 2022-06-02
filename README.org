@@ -36,7 +36,7 @@ the DOI as arguments.
 (defun my/pdf-process (file doi)
   (message "%s : %s" file doi))
 
-(setq pdf-drop-mode-hook #'my/pdf-process)
+(setq pdf-drop-search-hook #'my/pdf-process)
 (pdf-drop-mode)
 
 #+end_src
