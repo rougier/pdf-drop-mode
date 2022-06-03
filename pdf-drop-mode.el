@@ -184,7 +184,8 @@ doi is returned."
   ;;      (pdf-drop--process (substring uri 7))
   ;;    (error
   ;;     (pdf-drop--file-dnd-fallback uri action))))
-  (pdf-drop--process (substring uri 7)))
+  (let ((file (dnd-get-local-file-name uri)))
+    (pdf-drop--process file)))
 
 (defun pdf-drop--process (file)
   "Try to get the DOI associated to file."
