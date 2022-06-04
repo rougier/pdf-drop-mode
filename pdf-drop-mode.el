@@ -38,7 +38,12 @@
 ;;; of the file and query the crossref database to try to get a correspondong
 ;;; DOI. If this fails, then the search has failed. When search finishes, a
 ;;; used-defined hook is ran with the filename and the DOI as arguments.
-;;; 
+
+;;; To Do;
+;;;
+;;; - Handle arXiv papers as well. 
+;;; - Better error identification and handling
+
 ;;; News
 
 ;; Version 0.1.0
