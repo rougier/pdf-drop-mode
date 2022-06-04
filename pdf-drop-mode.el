@@ -67,8 +67,8 @@ Called function is provided with the filename and the associated
 doi (or nil) as arguments."
   :type 'function)
 
-(defvar pdf-drop--doi-regex "\\(10\\.[0-9]\\{4,9\\}/[-+._;()/:A-Z0-9]+[-+_()/:A-Z0-9]\\)"
-  "Regular expression matching a DOI.")
+(defvar pdf-drop--doi-regex "\\(10\\.[0-9]\\{4,9\\}/[-+._;()/:A-Z0-9]\\{4,\\}[-+_()/:A-Z0-9]\\)"
+  "Regular expressions matching a DOI.")
 
 (defvar pdf-drop--crossref-search-url "http://search.crossref.org/dois?q=%s&rows=10"
   "URL to the crossref search API")
