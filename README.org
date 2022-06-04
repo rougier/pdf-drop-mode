@@ -1,6 +1,6 @@
 * Documentation
 
-~pdf-drop-mode~ is a convenient mode that search for the DOI of any file that is
+~pdf-drop-mode~ is a convenient mode that search for the [[https://en.wikipedia.org/wiki/Digital_object_identifier][DOI]] of any file that is
 dropped onto a buffer. To do that, the mode searches the DOI using several
 different methods (whose order can be specified):
 
