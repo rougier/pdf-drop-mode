@@ -136,7 +136,7 @@ doi is returned."
                              (not score-threshold)
                              (< best-score score-threshold))
                          best-match
-                       (completing-read "Matched title: " sorted-candidates nil t
+                       (completing-read "Matched title: " sorted-candidates nil nil
                                         (if (< best-score 10) best-match nil))))
 	       (doi (cdr (assoc selected sorted-candidates))))
       doi)))
@@ -209,11 +209,13 @@ doi is returned."
             
               ((eq method 'title)
                (let ((title (pdf-drop-get-title-from-metadata file)))
-                 (when (and title (> (length title) 0))
-                   (setq doi (pdf-drop-get-doi-from-title title))
-                   (if doi
-                       (throw 'found doi)
-                     (message "Title method failed for %s" file)))))
+                 (if (and title (> (length title) 0))
+                     (progn
+                       (setq doi (pdf-drop-get-doi-from-title title))
+                       (if doi
+                           (throw 'found doi)
+                         (message "Title method failed for %s" file)))
+                   (message "Title method failed for %s" file))))
 
               ((eq method 'user-title)
                (let ((buffer (find-file file)))
