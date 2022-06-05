@@ -144,28 +144,24 @@ doi is returned."
 (defun pdf-drop-get-doi-from-content (file)
   "Extract doi from a pdf FILE content (after conversion to text)."
 
-  (unwind-protect
-      (with-current-buffer (get-buffer-create shell-command-buffer-name)
-        (shell-command (format "%s -f 1 -l 1 -enc UTF-8 %s -"
-                               pdf-drop-pdftotext-path
-                           (shell-quote-argument file)))
-        (goto-char (point-min))
-        (if (search-forward-regexp pdf-drop--doi-regex nil t)
-            (match-string 1)))
-    (kill-buffer shell-command-buffer-name)))
-
+  (with-temp-buffer
+    (let ((status (call-process pdf-drop-pdftotext-path nil '(t nil) nil
+                                "-f" "1" "-l" "1" "-enc" "UTF-8" file "-")))
+      (goto-char (point-min))
+      (if (and (eq status 0)
+               (> (buffer-size) 0)
+               (search-forward-regexp pdf-drop--doi-regex nil t))
+          (match-string 1)))))
+      
 (defun pdf-drop-get-tag-from-metadata (file tag)
   "Get TAG from file metadata."
 
-  (let ((output (string-trim
-                 (shell-command-to-string
-                  (format "%s -s -s -s -%s %s"
-                          pdf-drop-exiftool-path
-                          tag
-                          (shell-quote-argument file))))))
-    (if (> (length output) 0)
-        output
-      nil)))
+  (with-temp-buffer
+    (let ((status (call-process pdf-drop-exiftool-path nil '(t nil) nil
+                                "-s" "-s" "-s" (concat "-" tag) file)))
+      (if (and (eq status 0) (> (buffer-size) 0))
+          (string-trim (buffer-substring (point-min) (point-max)))))))
+  
 
 (defun pdf-drop-get-doi-from-metadata (file)
   "Get DOI from file metadata."
@@ -201,17 +197,23 @@ doi is returned."
         
         (cond ((eq method 'content) 
                (setq doi (pdf-drop-get-doi-from-content file))
-               (when doi (throw 'found doi)))
+               (if doi
+                   (throw 'found doi)
+                 (message "Content method failed for %s" file)))
 
               ((eq method 'metadata)
                (setq doi (pdf-drop-get-doi-from-content file))
-               (when doi (throw 'found doi)))
+               (if doi
+                   (throw 'found doi)
+                 (message "Metadata method failed for %s" file)))
             
               ((eq method 'title)
                (let ((title (pdf-drop-get-title-from-metadata file)))
                  (when (and title (> (length title) 0))
                    (setq doi (pdf-drop-get-doi-from-title title))
-                   (when doi (throw 'found doi)))))
+                   (if doi
+                       (throw 'found doi)
+                     (message "Title method failed for %s" file)))))
 
               ((eq method 'user-title)
                (let ((buffer (find-file file)))
@@ -221,7 +223,9 @@ doi is returned."
                                       (format "Enter title for %s: "
                                               (file-name-nondirectory file)))))
                          (setq doi (pdf-drop-get-doi-from-title title 5))
-                         (when doi (throw 'found doi)))
+                         (if doi
+                             (throw 'found doi)
+                           (message "User title method failed for %s" file)))
                      (kill-buffer buffer))))))))
 
     ;; Debug
