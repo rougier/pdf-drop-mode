@@ -5,7 +5,7 @@
 ;; Author: Nicolas P. Rougier <Nicolas.Rougier@inria.fr>
 ;; Homepage: https://github.com/rougier/pdf-drop-mode
 ;; Keywords: convenience
-;; Version: 0.1.0
+;; Version: 0.2.0
 
 ;; Package-Requires: ((emacs "27.1"))
 
@@ -25,32 +25,39 @@
 ;; see <https://www.gnu.org/licenses/>.
 
 ;;; Documentation
+;;
+;; pdf-drop-mode is a convenient mode that search for the identification (DOI or
+;; axiv-id) of any PDF file that is dropped onto a buffer. To do that, the mode
+;; search the identification using several different methods (whose order can be
+;; specified):
+;;
+;; - doi/metadata: search DOI in PDF metadata tags (using exiftool)
+;; - doi/content: search the content of the file to try to locate a DOI regex on
+;;                the first page (PDF is transformed into text using the pdftotext
+;;                utility)
+;; - doi/title: ask the user to enter the title of the file and query the crossref
+;;              database to try to get a correspondong DOI. 
+;; - doi/user: ask user to enter the DOI of the PDF.
+;; - arxiv/content: search the content of the file to try to locate a arxiv-id regex
+;;                  on the first page (PDF is transformed into text using the
+;;                  pdftotext utility)
+;; - arxiv/user: ask user to enter the arxiv-id of the PDF.
+;;
+;; If a method succeeds, a user-defined hook is ran with the filename and the ID
+;; as arguments (ID is a cons (ID-type . ID)). Else, search has failed.
 
-;;; pdf-drop-mode is a convenient mode that search for the DOI of any file that
-;;; is dropped onto a buffer. To do that, the mode search the DOI using several
-;;; different methods (whose order can be specified). By default, it will first
-;;; look at the file metadata to check if a DOI is attached using exiftool
-;;; (whose path can be specified). If this fails, it will search the content of
-;;; the file to try to locate a DOI regex on the first page (PDF is transformed
-;;; into text using the pdftotext utility). If this fails, it will search again
-;;; the metadata to try to find the title and query the crossref database to get
-;;; a corresponding DOI. If this fails, it will ask the user to enter the title
-;;; of the file and query the crossref database to try to get a correspondong
-;;; DOI. If this fails, then the search has failed. When search finishes, a
-;;; used-defined hook is ran with the filename and the DOI as arguments.
-
-;;; To Do;
-;;;
-;;; - Handle arXiv papers as well. 
-;;; - Better error identification and handling
 
 ;;; News
+
+;; Version 0.2.0
+;; - API modification for taling into account arxiv papers.
+;; - arxiv papers are now identified.
 
 ;; Version 0.1.0
 ;; Initial release
 
 ;;; Code:
-(require 'bibtex)
+(require 'url-http)
 
 (defcustom pdf-drop-pdftotext-path "pdftotext"
   "Path to the pdftotext executable (used to extract DOI from the
@@ -62,17 +69,23 @@ content of a pdf)."
 pdf metadata)."
   :type 'file)
 
-(defcustom pdf-drop-search-methods '(metadata content title user-title)
-  "Ordered list of methods to use to get the DOI from a pdf."
+(defcustom pdf-drop-search-methods '(doi/metadata
+                                     doi/content
+                                     arxiv/content
+                                     doi/title
+                                     doi/user)
+  "Ordered list of methods to use to get the an identifier (doi or arxiv-id) from a pdf."
   :type 'list)
 
 (defcustom pdf-drop-search-hook nil
-  "A pointer to a functi<on that is called when a search ends.
+  "A pointer to a function that is called when a search ends.
 Called function is provided with the filename and the associated
 doi (or nil) as arguments."
   :type 'function)
 
-(defvar pdf-drop--doi-regex "\\(10\\.[0-9]\\{4,9\\}/[-+._;()/:A-Z0-9]\\{4,\\}[-+_()/:A-Z0-9]\\)"
+;; This will fail if the DOI is split over two lines. Such case may happend when
+;; pdftotext is used to convert the PDF to text.
+(defvar pdf-drop--doi-regex "\\(10\\.[0-9]\\{4,9\\}/[-+._;()/:A-Z0-9]+\\)"
   "Regular expressions matching a DOI.")
 
 (defvar pdf-drop--crossref-search-url "http://search.crossref.org/dois?q=%s&rows=10"
@@ -80,6 +93,35 @@ doi (or nil) as arguments."
 
 (defvar pdf-drop--crossref-query-url "http://dx.doi.org/%s"
   "URL to the crossref query API")
+
+;; Adapted from https://github.com/jkitchin/org-ref (org-ref-arxiv.el)
+;; Copyright (C) 2015-2021 John Kitchin (GPL v2)
+(defvar pdf-drop--arxiv-regex "\\(arXiv:\\)\\([0-9]\\{4\\}[.][0-9]\\{4,5\\}\\)\\(v[0-9]+\\)?"
+    "Regular expressions matching an arxiv-id (new format, 2007).")
+
+(defvar pdf-drop--arxiv-search-url "https://ui.adsabs.harvard.edu/abs/%s/exportcitation"
+  "URL to arxiv searh yAPI")
+
+(defvar pdf-drop--arxiv-query-url "http://adsabs.harvard.edu/cgi-bin/bib_query?arXiv:%s"
+  "URL to the arxiv query API")
+
+(defun pdf-drop-validate-doi (doi)
+  "Check if DOI is valid by querying crossref"
+  
+  (let* ((url (format pdf-drop--crossref-query-url doi))
+         (status (url-http-symbol-value-in-buffer 'url-http-response-status
+                                                  (url-retrieve-synchronously url))))
+    (eq 200 status)))
+
+;; Adapted from https://github.com/jkitchin/org-ref (org-ref-arxiv.el)
+;; Copyright (C) 2015-2021 John Kitchin (GPL v2)
+(defun pdf-drop-validate-arxiv-id (arxiv-id)
+  "Check if ARXIV-ID is valid by querying arXiv"
+  
+  (let* ((url (format pdf-drop--arxiv-query-url arxiv-id))
+         (status (url-http-symbol-value-in-buffer 'url-http-response-status
+                                   (url-retrieve-synchronously url))))
+    (eq 200 status)))
 
 ;; Adapted from https://github.com/jkitchin/org-ref (doi-utils.el)
 ;; Copyright (C) 2015-2021 John Kitchin (GPL v2)
@@ -151,7 +193,8 @@ doi is returned."
       (if (and (eq status 0)
                (> (buffer-size) 0)
                (search-forward-regexp pdf-drop--doi-regex nil t))
-          (match-string 1)))))
+          (string-trim (match-string 1) "[ \\t\\n\\r()]+" "[ \\t\\n\\r()]+")
+        ))))
       
 (defun pdf-drop-get-tag-from-metadata (file tag)
   "Get TAG from file metadata."
@@ -173,6 +216,17 @@ doi is returned."
   
   (pdf-drop-get-tag-from-metadata file "TITLE"))
 
+(defun pdf-drop-get-arxiv-id-from-content (file)
+  "Extract arxiv-id from a pdf FILE content (after conversion to text)."
+
+  (with-temp-buffer
+    (let ((status (call-process pdf-drop-pdftotext-path nil '(t nil) nil
+                                "-f" "1" "-l" "1" "-enc" "UTF-8" file "-")))
+      (goto-char (point-min))
+      (if (and (eq status 0)
+               (> (buffer-size) 0)
+               (search-forward-regexp pdf-drop--arxiv-regex nil t))
+          (string-trim (match-string 2) "[ \\t\\n\\r()]+" "[ \\t\\n\\r()]+")))))
 
 (defun pdf-drop--file-dnd-fallback (uri action)
   (let ((dnd-protocol-alist
@@ -190,70 +244,99 @@ doi is returned."
 
 (defun pdf-drop--process (file)
   "Try to get the DOI associated to file."
-  
-  (let ((doi))
+
+  (let ((file-id))
     (catch 'found
       (dolist (method pdf-drop-search-methods)
-        
-        (cond ((eq method 'content) 
-               (setq doi (pdf-drop-get-doi-from-content file))
-               (if doi
-                   (throw 'found doi)
-                 (message "Content method failed for %s" file)))
 
-              ((eq method 'metadata)
-               (setq doi (pdf-drop-get-doi-from-content file))
-               (if doi
-                   (throw 'found doi)
-                 (message "Metadata method failed for %s" file)))
-            
-              ((eq method 'title)
-               (let ((title (pdf-drop-get-title-from-metadata file)))
-                 (if (and title (> (length title) 0))
+        (cond ((eq method 'doi/content) 
+               (let ((doi (pdf-drop-get-doi-from-content file)))
+                 (if (and doi (pdf-drop-validate-doi doi))
                      (progn
-                       (setq doi (pdf-drop-get-doi-from-title title))
-                       (if doi
-                           (throw 'found doi)
-                         (message "Title method failed for %s" file)))
-                   (message "Title method failed for %s" file))))
+                       (setq file-id `(doi . ,doi))
+                       (throw 'found file-id))
+                   (message "Content method failed for %s" file))))
 
-              ((eq method 'user-title)
+              ((eq method 'arxiv/content) 
+               (let ((arxiv-id (pdf-drop-get-arxiv-id-from-content file)))
+                 (if (and arxiv-id (pdf-drop-validate-arxiv-id arxiv-id))
+                     (progn
+                       (setq file-id `(arxiv . ,arxiv-id))
+                       (throw 'found file-id))
+                   (message "arXiv method failed for %s" file))))
+
+              ((eq method 'doi/metadata)
+               (let ((doi (pdf-drop-get-doi-from-metadata file)))
+                 (if (and doi (pdf-drop-validate-doi doi))
+                     (progn
+                       (setq file-id `(doi . ,doi))
+                       (throw 'found file-id))
+                   (message "Metadata method failed for %s" file))))
+            
+              ((eq method 'doi/title)
                (let ((buffer (find-file file)))
                  (with-current-buffer buffer
                    (unwind-protect
                        (let* ((title (read-string
                                       (format "Enter title for %s: "
-                                              (file-name-nondirectory file)))))
-                         (setq doi (pdf-drop-get-doi-from-title title 5))
-                         (if doi
-                             (throw 'found doi)
+                                              (file-name-nondirectory file))))
+                              (doi (pdf-drop-get-doi-from-title title 5)))
+                         (if (and doi (pdf-drop-validate-doi doi))
+                             (progn
+                               (setq file-id `(doi . ,doi))
+                               (throw 'found file-id))
                            (message "User title method failed for %s" file)))
+                     (kill-buffer buffer)))))
+
+              ((eq method 'doi/user)
+               (let ((buffer (find-file file)))
+                 (with-current-buffer buffer
+                   (unwind-protect
+                       (let* ((doi (read-string
+                                    (format "Enter DOI for %s: "
+                                            (file-name-nondirectory file)))))
+                         (if (and doi (pdf-drop-validate-doi doi))
+                             (progn
+                               (setq file-id `(doi . ,doi))
+                               (throw 'found file-id))
+                           (message "User DOI method failed for %s" file)))
                      (kill-buffer buffer))))))))
 
-    ;; Debug
-    (when (and doi pdf-drop-search-hook)
-      (apply pdf-drop-search-hook (list file doi)))))
+    (if file-id 
+        (progn
+          (message "ID found: %s" file-id)
+          (if pdf-drop-search-hook
+              (apply pdf-drop-search-hook (list file file-id))))
+      (message "Search failed for %s" file))))
 
 
 (defun pdf-drop--bibtex-from-doi (doi)
-  "Retrieve bibtex item using crossref information and DOI."
+  "Retrieve (raw) bibtex information for DOI using crossref API."
   
   (let ((url-mime-accept-string "text/bibliography;style=bibtex"))
     (with-current-buffer
       (url-retrieve-synchronously (format pdf-drop--crossref-query-url doi))
-      (setq bibtex-entry (buffer-substring 
-          	              (string-match "@" (buffer-string))
-                          (point)))
-      (kill-buffer (current-buffer))))
-  (with-temp-buffer
-    (insert (decode-coding-string bibtex-entry 'utf-8))
-    (goto-char (point-min))
-    (bibtex-set-dialect 'biblatex t)
-    (let ((bibtex-autokey-edit-before-use nil)
-          (bibtex-entry-format nil))
-      (bibtex-clean-entry t))
-    (bibtex-reformat)
-    (buffer-substring (point-min) (point-max))))
+      (decode-coding-string
+       (buffer-substring (string-match "@" (buffer-string)) (point)) 'utf-8))))
+
+
+(defun pdf-drop--bibtex-from-arxiv-id (arxiv-id)
+  "Retrieve (raw) bibtex information for ARXIV-ID item using arxiv API."
+
+  (let* ((arxiv-code
+          (with-current-buffer
+              (url-retrieve-synchronously (format pdf-drop--arxiv-query-url arxiv-id))
+            (search-forward-regexp "<link rel=\"canonical\" href=\"http://ui.adsabs.harvard.edu/abs/\\(.*\\)/abstract\"/>")
+            (match-string 1)))
+         (bibtex (when arxiv-code
+                   (with-current-buffer
+                       (url-retrieve-synchronously (format pdf-drop--arxiv-search-url arxiv-code))
+                     (when (re-search-forward
+	                        "<textarea.*>\\(.*\\(?:\n.*\\)*?\\(?:\n\\s-*\n\\|\\'\\)\\)</textarea>"
+	                        nil t)
+                       (xml-substitute-special (match-string 1)))))))
+    bibtex))
+
 
 (define-minor-mode pdf-drop-mode
   "Minor mode that search for the doi of any pdf file dropped onto a buffer."
