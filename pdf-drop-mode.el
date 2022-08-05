@@ -249,13 +249,13 @@ doi is returned."
     (catch 'found
       (dolist (method pdf-drop-search-methods)
 
-        (cond ((eq method 'doi/content) 
+        (cond ((eq method 'doi/content)
                (let ((doi (pdf-drop-get-doi-from-content file)))
                  (if (and doi (pdf-drop-validate-doi doi))
                      (progn
                        (setq file-id `(doi . ,doi))
                        (throw 'found file-id))
-                   (message "Content method failed for %s" file))))
+                   (message "doi/content method failed for %s" file))))
 
               ((eq method 'arxiv/content) 
                (let ((arxiv-id (pdf-drop-get-arxiv-id-from-content file)))
@@ -263,7 +263,7 @@ doi is returned."
                      (progn
                        (setq file-id `(arxiv . ,arxiv-id))
                        (throw 'found file-id))
-                   (message "arXiv method failed for %s" file))))
+                   (message "arxiv/content method failed for %s" file))))
 
               ((eq method 'doi/metadata)
                (let ((doi (pdf-drop-get-doi-from-metadata file)))
@@ -271,7 +271,7 @@ doi is returned."
                      (progn
                        (setq file-id `(doi . ,doi))
                        (throw 'found file-id))
-                   (message "Metadata method failed for %s" file))))
+                   (message "doi/metadata method failed for %s" file))))
             
               ((eq method 'doi/title)
                (let ((buffer (find-file file)))
@@ -285,7 +285,7 @@ doi is returned."
                              (progn
                                (setq file-id `(doi . ,doi))
                                (throw 'found file-id))
-                           (message "User title method failed for %s" file)))
+                           (message "doi/title method failed for %s" file)))
                      (kill-buffer buffer)))))
 
               ((eq method 'doi/user)
@@ -299,7 +299,7 @@ doi is returned."
                              (progn
                                (setq file-id `(doi . ,doi))
                                (throw 'found file-id))
-                           (message "User DOI method failed for %s" file)))
+                           (message "doi/user method failed for %s" file)))
                      (kill-buffer buffer))))))))
 
     (if file-id 
