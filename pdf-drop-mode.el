@@ -108,7 +108,7 @@ doi (or nil) as arguments."
 (defun pdf-drop-validate-doi (doi)
   "Check if DOI is valid by querying crossref"
   
-  (let* ((url (format pdf-drop--crossref-query-url doi))
+  (let* ((url (format "https://hdl.handle.net/%s?noredirect" doi))
          (status (url-http-symbol-value-in-buffer 'url-http-response-status
                                                   (url-retrieve-synchronously url))))
     (eq 200 status)))
